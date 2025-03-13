@@ -1,8 +1,11 @@
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, ".env") });
+
 const express = require("express");
 const mongoose = require("mongoose");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-require("dotenv").config();
+const nodemailer = require("nodemailer"); // Import Nodemailer
 
 // Initialize Express App
 const app = express();
@@ -33,13 +36,22 @@ const formSchema = new mongoose.Schema({
 // Mongoose Model
 const Form = mongoose.model("Form", formSchema);
 
+// Nodemailer Transporter
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER, // Your email
+    pass: process.env.EMAIL_PASS, // Google App Password
+  },
+});
+
 // API Endpoint to Handle Form Submission
 app.post("/submit-form", async (req, res) => {
   try {
     const { firstName, lastName, email, address, zipCode, phoneNumber } =
       req.body;
 
-    // Create a new form entry
+    // Save Form Data to Database
     const newFormEntry = new Form({
       firstName,
       lastName,
@@ -49,14 +61,31 @@ app.post("/submit-form", async (req, res) => {
       phoneNumber,
     });
 
-    // Save to Database
     await newFormEntry.save();
 
-    res
-      .status(200)
-      .json({ success: true, message: "Form submitted successfully!" });
+    // Email Content
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: process.env.CLIENT_EMAIL, // Client's email (where data should be sent)
+      subject: "New Form Submission",
+      html: `
+        <h2>New Form Submission</h2>
+        <p><strong>Name:</strong> ${firstName} ${lastName}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phoneNumber}</p>
+        <p><strong>Address:</strong> ${address}, ${zipCode}</p>
+      `,
+    };
+
+    // Send Email
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({
+      success: true,
+      message: "Form submitted successfully! Email sent to client.",
+    });
   } catch (error) {
-    console.error("Error saving form data:", error);
+    console.error("Error:", error);
     res.status(500).json({ success: false, message: "Failed to submit form." });
   }
 });
